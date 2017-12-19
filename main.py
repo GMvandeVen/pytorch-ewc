@@ -28,6 +28,8 @@ parser.add_argument('--eval-log-interval', type=int, default=50)
 parser.add_argument('--loss-log-interval', type=int, default=30)
 parser.add_argument('--consolidate', action='store_true')
 
+print("test")
+exit()
 
 if __name__ == '__main__':
     args = parser.parse_args()
