@@ -13,7 +13,6 @@ parser.add_argument('--hidden-size', type=int, default=400)
 parser.add_argument('--hidden-layer-num', type=int, default=2)
 parser.add_argument('--hidden-dropout-prob', type=float, default=.5)
 parser.add_argument('--input-dropout-prob', type=float, default=.2)
-
 parser.add_argument('--task-number', type=int, default=5)
 parser.add_argument('--epochs-per-task', type=int, default=1)
 parser.add_argument('--lamda', type=float, default=5e+3)
@@ -28,8 +27,6 @@ parser.add_argument('--eval-log-interval', type=int, default=50)
 parser.add_argument('--loss-log-interval', type=int, default=30)
 parser.add_argument('--consolidate', action='store_true')
 
-print("test")
-exit()
 
 if __name__ == '__main__':
     args = parser.parse_args()
