@@ -12,7 +12,8 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
           lr=1e-3, weight_decay=1e-5, lamda=3,
           loss_log_interval=30,
           eval_log_interval=50,
-          cuda=False):
+          cuda=False,
+          no_plot=False):
     # prepare the loss criteriton and the optimizer.
     criteriton = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr,
@@ -89,35 +90,37 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                 ))
 
                 # Send test precision to the visdom server.
-                if iteration % eval_log_interval == 0:
-                    names = [
-                        'task {}'.format(i+1) for i in
-                        range(len(train_datasets))
-                    ]
-                    precs = [
-                        utils.validate(
-                            model, test_datasets[i], test_size=test_size,
-                            cuda=cuda, verbose=False,
-                        ) if i+1 <= task else 0 for i in
-                        range(len(train_datasets))
-                    ]
-                    title = (
-                        'precision (consolidated)' if consolidate else
-                        'precision'
-                    )
-                    visual.visualize_scalars(
-                        precs, names, title,
-                        iteration, env=model.name,
-                    )
+                if not no_plot:
+                    if iteration % eval_log_interval == 0:
+                        names = [
+                            'task {}'.format(i+1) for i in
+                            range(len(train_datasets))
+                        ]
+                        precs = [
+                            utils.validate(
+                                model, test_datasets[i], test_size=test_size,
+                                cuda=cuda, verbose=False,
+                            ) if i+1 <= task else 0 for i in
+                            range(len(train_datasets))
+                        ]
+                        title = (
+                            'precision (consolidated)' if consolidate else
+                            'precision'
+                        )
+                        visual.visualize_scalars(
+                            precs, names, title,
+                            iteration, env=model.name,
+                        )
 
                 # Send losses to the visdom server.
-                if iteration % loss_log_interval == 0:
-                    title = 'loss (consolidated)' if consolidate else 'loss'
-                    visual.visualize_scalars(
-                        [loss.data, ce_loss.data, ewc_loss.data],
-                        ['total', 'cross entropy', 'ewc'],
-                        title, iteration, env=model.name
-                    )
+                if not no_plot:
+                    if iteration % loss_log_interval == 0:
+                        title = 'loss (consolidated)' if consolidate else 'loss'
+                        visual.visualize_scalars(
+                            [loss.data, ce_loss.data, ewc_loss.data],
+                            ['total', 'cross entropy', 'ewc'],
+                            title, iteration, env=model.name
+                        )
 
         if consolidate:
             # estimate the fisher information of the parameters and consolidate

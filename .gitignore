@@ -108,3 +108,4 @@ datasets/
 Dockerfile*
 docker-compose.yml.jinja
 nvidia-docker-compose.yml
+run_visdom_and_*.sh
