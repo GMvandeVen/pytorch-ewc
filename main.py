@@ -26,7 +26,7 @@ parser.add_argument('--no-gpus', action='store_false', dest='cuda')
 parser.add_argument('--eval-log-interval', type=int, default=50)
 parser.add_argument('--loss-log-interval', type=int, default=30)
 parser.add_argument('--consolidate', action='store_true')
-parser.add_argument('--no-plot', action='store_true')
+parser.add_argument('--plot', default='visdom')
 
 
 if __name__ == '__main__':
@@ -81,5 +81,6 @@ if __name__ == '__main__':
         eval_log_interval=args.eval_log_interval,
         loss_log_interval=args.loss_log_interval,
         cuda=cuda,
-        no_plot=args.no_plot
+        plot=args.plot,
+        pdf_file_name="jnk.pdf"
     )

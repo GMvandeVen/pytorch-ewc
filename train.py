@@ -3,7 +3,9 @@ from torch import nn
 from torch.autograd import Variable
 from tqdm import tqdm
 import utils
-import visual
+import visual_visdom
+import visual_plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 def train(model, train_datasets, test_datasets, epochs_per_task=10,
@@ -13,25 +15,48 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
           loss_log_interval=30,
           eval_log_interval=50,
           cuda=False,
-          no_plot=False):
-    # prepare the loss criteriton and the optimizer.
-    criteriton = nn.CrossEntropyLoss()
+          plot="pdf",
+          pdf_file_name=None):
+
+    # number of tasks
+    n_tasks = len(train_datasets)
+
+    # prepare the loss criterion and the optimizer.
+    criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr,
                            weight_decay=weight_decay)
 
     # set the model's mode to training mode.
     model.train()
 
+    # if plotting, prepare task names and plot-titles
+    if not plot=="none":
+        names = ['task {}'.format(i + 1) for i in range(n_tasks)]
+        title_precision = 'precision (consolidated)' if consolidate else 'precision'
+        title_loss = 'loss (consolidated)' if consolidate else 'loss'
+
+    # if plotting in pdf, initiate lists for storing data
+    if plot=="pdf":
+        all_task_lists = [[] for _ in range(n_tasks)]
+        x_list = []
+        all_loss_lists = [[] for _ in range(3)]
+        x_loss_list = []
+
+    # training, ..looping over all tasks
     for task, train_dataset in enumerate(train_datasets, 1):
+
+        # ..looping over all epochs
         for epoch in range(1, epochs_per_task+1):
-            # prepare the data loaders.
+
+            # prepare data-loader, and wrap in "tqdm"-object.
             data_loader = utils.get_data_loader(
-                train_dataset, batch_size=batch_size,
-                cuda=cuda
+                train_dataset, batch_size=batch_size, cuda=cuda
             )
             data_stream = tqdm(enumerate(data_loader, 1))
 
+            # ..looping over all batches
             for batch_index, (x, y) in data_stream:
+
                 # where are we?
                 data_size = len(x)
                 dataset_size = len(data_loader.dataset)
@@ -40,23 +65,18 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                     epochs_per_task * len(d) // batch_size for d in
                     train_datasets[:task-1]
                 ])
-                current_task_iteration = (
-                    (epoch-1)*dataset_batches + batch_index
-                )
-                iteration = (
-                    previous_task_iteration +
-                    current_task_iteration
-                )
+                current_task_iteration = (epoch-1)*dataset_batches + batch_index
+                iteration = previous_task_iteration + current_task_iteration
 
                 # prepare the data.
                 x = x.view(data_size, -1)
                 x = Variable(x).cuda() if cuda else Variable(x)
                 y = Variable(y).cuda() if cuda else Variable(y)
 
-                # run the model and backpropagate the errors.
+                # run model, backpropagate errors, update parameters.
                 optimizer.zero_grad()
                 scores = model(x)
-                ce_loss = criteriton(scores, y)
+                ce_loss = criterion(scores, y)
                 ewc_loss = model.ewc_loss(lamda, cuda=cuda)
                 loss = ce_loss + ewc_loss
                 loss.backward()
@@ -66,6 +86,7 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                 _, predicted = scores.max(1)
                 precision = (predicted == y).sum().data[0] / len(x)
 
+                # print progress to the screen using "tqdm"
                 data_stream.set_description((
                     'task: {task}/{tasks} | '
                     'epoch: {epoch}/{epochs} | '
@@ -77,7 +98,7 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                     'total: {loss:.4}'
                 ).format(
                     task=task,
-                    tasks=len(train_datasets),
+                    tasks=n_tasks,
                     epoch=epoch,
                     epochs=epochs_per_task,
                     trained=batch_index*batch_size,
@@ -89,42 +110,69 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                     loss=loss.data[0],
                 ))
 
-                # Send test precision to the visdom server.
-                if not no_plot:
+                # Send test precision to the visdom server,
+                #  or store for later plotting to pdf.
+                if not plot=="none":
                     if iteration % eval_log_interval == 0:
-                        names = [
-                            'task {}'.format(i+1) for i in
-                            range(len(train_datasets))
-                        ]
                         precs = [
                             utils.validate(
                                 model, test_datasets[i], test_size=test_size,
                                 cuda=cuda, verbose=False,
-                            ) if i+1 <= task else 0 for i in
-                            range(len(train_datasets))
+                            ) if i+1 <= task else 0 for i in range(n_tasks)
                         ]
-                        title = (
-                            'precision (consolidated)' if consolidate else
-                            'precision'
-                        )
-                        visual.visualize_scalars(
-                            precs, names, title,
-                            iteration, env=model.name,
-                        )
+                        if plot=="visdom":
+                            visual_visdom.visualize_scalars(
+                                precs, names, title_precision,
+                                iteration, env=model.name,
+                            )
+                        elif plot=="pdf":
+                            for task_id, _ in enumerate(names):
+                                all_task_lists[task_id].append(precs[task_id])
+                            x_list.append(iteration)
 
-                # Send losses to the visdom server.
-                if not no_plot:
+                # Send losses to the visdom server,
+                #  or store for later plotting to pdf.
+                if not plot=="none":
                     if iteration % loss_log_interval == 0:
-                        title = 'loss (consolidated)' if consolidate else 'loss'
-                        visual.visualize_scalars(
-                            [loss.data, ce_loss.data, ewc_loss.data],
-                            ['total', 'cross entropy', 'ewc'],
-                            title, iteration, env=model.name
-                        )
+                        if plot=="visdom":
+                            visual_visdom.visualize_scalars(
+                                [loss.data, ce_loss.data, ewc_loss.data],
+                                ['total', 'cross entropy', 'ewc'],
+                                title_loss, iteration, env=model.name
+                            )
+                        elif plot=="pdf":
+                            all_loss_lists[0].append(loss.data.cpu().numpy()[0])
+                            all_loss_lists[1].append(ce_loss.data.cpu().numpy()[0])
+                            all_loss_lists[2].append(ewc_loss.data.cpu().numpy()[0])
+                            x_loss_list.append(iteration)
 
         if consolidate:
-            # estimate the fisher information of the parameters and consolidate
-            # them in the network.
+            # after each task, estimate fisher information of the parameters
+            #  and consolidate them in the network.
             model.consolidate(model.estimate_fisher(
                 train_dataset, fisher_estimation_sample_size
             ))
+
+    # if requested, generate pdf.
+    if plot=="pdf":
+        # create list to store all figures to be plotted.
+        figure_list = []
+
+        # Fig1: precision
+        figure = visual_plt.plot_lines(
+            all_task_lists, x_axes=x_list, line_names=names
+        )
+        figure_list.append(figure)
+
+        # Fig2: loss
+        figure = visual_plt.plot_lines(
+            all_loss_lists, x_axes=x_loss_list,
+            line_names=['total', 'cross entropy', 'ewc']
+        )
+        figure_list.append(figure)
+
+        # create pdf containing all figures.
+        pdf = PdfPages(pdf_file_name)
+        for figure in figure_list:
+            pdf.savefig(figure)
+        pdf.close()
