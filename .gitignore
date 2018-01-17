@@ -112,3 +112,6 @@ run_visdom_and_*.sh
 
 # Result-files
 results/
+
+# Notebooks
+notebooks/

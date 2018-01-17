@@ -6,7 +6,7 @@ import utils
 import visual_visdom
 import visual_plt
 from matplotlib.backends.backend_pdf import PdfPages
-
+import random
 
 def train(model, train_datasets, test_datasets, epochs_per_task=10,
           batch_size=64, test_size=1024, consolidate=True,
@@ -25,9 +25,6 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr,
                            weight_decay=weight_decay)
-
-    # set the model's mode to training mode.
-    model.train()
 
     # if plotting, prepare task names and plot-titles
     if not plot=="none":
@@ -74,6 +71,7 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                 y = Variable(y).cuda() if cuda else Variable(y)
 
                 # run model, backpropagate errors, update parameters.
+                model.train()
                 optimizer.zero_grad()
                 scores = model(x)
                 ce_loss = criterion(scores, y)
@@ -147,11 +145,25 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                             x_loss_list.append(iteration)
 
         if consolidate:
+            # take random samples from every task learned so far
+            dataset_old_tasks = []
+            for prev_task_id in range(task):
+                prev_dataset = train_datasets[prev_task_id]
+                sample_ids = random.sample(
+                    range(len(prev_dataset)), fisher_estimation_sample_size
+                )
+                sample = [prev_dataset[id] for id in sample_ids]
+                dataset_old_tasks += sample
+            # from all those samples, randomly select [fisher_estimation_sample_size]
+            dataset_old_tasks = random.sample(dataset_old_tasks, k = fisher_estimation_sample_size)
+            # estimate the Fisher Information matrix and consolidate it in the network
+            model.consolidate(model.estimate_fisher(dataset_old_tasks))
+
             # after each task, estimate fisher information of the parameters
             #  and consolidate them in the network.
-            model.consolidate(model.estimate_fisher(
-                train_dataset, fisher_estimation_sample_size
-            ))
+            # model.consolidate(model.estimate_fisher_old(
+            #     train_dataset, fisher_estimation_sample_size
+            # ))
 
     # if requested, generate pdf.
     if plot=="pdf":
