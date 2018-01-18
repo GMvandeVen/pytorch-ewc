@@ -8,12 +8,12 @@ from model import MLP
 import utils
 
 
-parser = ArgumentParser('EWC PyTorch Implementation')
+parser = ArgumentParser('PyTorch Implementation: EWC / Intelligent Synapses')
 parser.add_argument('--hidden-size', type=int, default=400)
 parser.add_argument('--hidden-layer-num', type=int, default=2)
 parser.add_argument('--hidden-dropout-prob', type=float, default=.5)
 parser.add_argument('--input-dropout-prob', type=float, default=.2)
-parser.add_argument('--task-number', type=int, default=5)
+parser.add_argument('--task-number', type=int, default=10)
 parser.add_argument('--epochs-per-task', type=int, default=1)
 parser.add_argument('--lamda', type=float, default=5e+3)
 parser.add_argument('--lr', type=float, default=1e-03)
@@ -27,6 +27,9 @@ parser.add_argument('--eval-log-interval', type=int, default=50)
 parser.add_argument('--loss-log-interval', type=int, default=30)
 parser.add_argument('--consolidate', action='store_true')
 parser.add_argument('--plot', default='visdom')
+parser.add_argument('--intelligent-synapses', action='store_true')
+parser.add_argument('--epsilon', type=float, default=0.1)
+parser.add_argument('--c-weight', type=float, default=0.1)
 
 
 if __name__ == '__main__':
@@ -35,8 +38,10 @@ if __name__ == '__main__':
     # decide whether to use cuda or not.
     cuda = torch.cuda.is_available() and args.cuda
 
-    # generate permutations for the tasks.
+    # set random seed(s)
     np.random.seed(args.random_seed)
+
+    # generate permutations for the tasks.
     permutations = [
         np.random.permutation(DATASET_CONFIGS['mnist']['size']**2) for
         _ in range(args.task_number)
@@ -82,5 +87,8 @@ if __name__ == '__main__':
         loss_log_interval=args.loss_log_interval,
         cuda=cuda,
         plot=args.plot,
-        pdf_file_name="jnk.pdf"
+        pdf_file_name="jnk.pdf",
+        epsilon=args.epsilon,
+        c=args.c_weight,
+        intelligent_synapses=args.intelligent_synapses
     )
