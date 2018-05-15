@@ -60,7 +60,7 @@ class MLP(nn.Module):
     def estimate_fisher(self, dataset):
         '''Estimates diagonal of Fisher Information matrix based on [dataset].
 
-        [dataset]:  list of data-points [x, y] (should be random sample from all previous tasks)'''
+        [dataset]:  list of data-points [x, y] based on which to estimate FI-matrix'''
 
         # prepare dictionary to store estimated Fisher Information matrix.
         est_fisher_info = {}
@@ -82,7 +82,6 @@ class MLP(nn.Module):
             ## OPTION 2: use true label to calculate loglikelihood:
             #label = torch.LongTensor([y]) if type(y) == int else y
             #label = Variable(label).cuda() if self._is_on_cuda() else Variable(label)
-            ##--> based on the permuted MNIST task, OPTION 1 seems to work better
             #-------------------------------------------------------------------------#
             if int(torch.__version__[2])>2:
                 loglikelihood = F.nll_loss(F.log_softmax(output, dim=1), label)

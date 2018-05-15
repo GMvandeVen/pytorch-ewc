@@ -180,19 +180,11 @@ def train(model, train_datasets, test_datasets, epochs_per_task=10,
                             x_loss_list.append(iteration)
 
         if consolidate:
-            # take random samples from every task learned so far
-            dataset_old_tasks = []
-            for prev_task_id in range(task):
-                prev_dataset = train_datasets[prev_task_id]
-                sample_ids = random.sample(
-                    range(len(prev_dataset)), fisher_estimation_sample_size
-                )
-                sample = [prev_dataset[id] for id in sample_ids]
-                dataset_old_tasks += sample
-            # from all those samples, randomly select [fisher_estimation_sample_size]
-            dataset_old_tasks = random.sample(dataset_old_tasks, k = fisher_estimation_sample_size)
+            # take [fisher_estimation_sample_size] random samples from the last task learned
+            sample_ids = random.sample(range(len(train_dataset)), fisher_estimation_sample_size)
+            selected_samples = [train_dataset[id] for id in sample_ids]
             # estimate the Fisher Information matrix and consolidate it in the network
-            model.estimate_fisher(dataset_old_tasks)
+            model.estimate_fisher(selected_samples)
 
         if intelligent_synapses:
             # update & consolidate normalized path integral in the network
