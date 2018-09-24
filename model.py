@@ -19,6 +19,7 @@ class MLP(nn.Module):
         self.hidden_layer_num = hidden_layer_num
         self.hidden_dropout_prob = hidden_dropout_prob
         self.output_size = output_size
+        self.EWC_task_count = 0 #-> keeps track of number of quadratic loss terms (for EWC)
 
         # Layers.
         self.layers = nn.ModuleList([
@@ -105,27 +106,29 @@ class MLP(nn.Module):
         # consolidate new values in the network
         for n, p in self.named_parameters():
             n = n.replace('.', '__')
-            self.register_buffer('{}_prev_task'.format(n), p.data.clone())
-            self.register_buffer('{}_estimated_fisher'.format(n), est_fisher_info[n])
+            self.register_buffer('{}_prev_task{}'.format(n, self.EWC_task_count+1), p.data.clone())
+            self.register_buffer('{}_estimated_fisher{}'.format(n, self.EWC_task_count+1), est_fisher_info[n])
+
+        # increase task-count
+        self.EWC_task_count += 1
 
     def ewc_loss(self, lamda, cuda=False):
-        try:
+        if self.EWC_task_count>0:
             losses = []
-            for n, p in self.named_parameters():
-                # retrieve the consolidated mean and fisher information.
-                n = n.replace('.', '__')
-                mean = getattr(self, '{}_prev_task'.format(n))
-                fisher = getattr(self, '{}_estimated_fisher'.format(n))
-                # wrap mean and fisher in variables.
-                mean = Variable(mean)
-                fisher = Variable(fisher)
-                # calculate a ewc loss. (assumes the parameter's prior as
-                # gaussian distribution with the estimated mean and the
-                # estimated cramer-rao lower bound variance, which is
-                # equivalent to the inverse of fisher information)
-                losses.append((fisher * (p-mean)**2).sum())
+            # Loop over all previous tasks
+            for task in range(1, self.EWC_task_count+1):
+                for n, p in self.named_parameters():
+                    # retrieve this task's consolidated mean and fisher information.
+                    n = n.replace('.', '__')
+                    mean = getattr(self, '{}_prev_task{}'.format(n, task))
+                    fisher = getattr(self, '{}_estimated_fisher{}'.format(n, task))
+                    # wrap mean and fisher in variables.
+                    mean = Variable(mean)
+                    fisher = Variable(fisher)
+                    # calculate ewc loss for this task.
+                    losses.append((fisher * (p-mean)**2).sum())
             return (lamda/2)*sum(losses)
-        except AttributeError:
+        else:
             # ewc loss is 0 if there is no consolidated "estimated_fisher".
             return (
                 Variable(torch.zeros(1)).cuda() if cuda else
